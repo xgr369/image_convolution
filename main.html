@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Image Effect Enhancer</title>
+  <style>
+    body {
+		font-family: Arial, sans-serif;
+    }
+    canvas {
+		border: 1px solid black;
+		margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <input type="file" id="imageInput" accept="image/*">
+  <br>
+  <div id="control"></div>
+  <br>
+  <canvas id="canvas"></canvas>
+
+  <script>
+	let roundSize = 128;
+	const FILTER_WIDTH = 10;
+	const FILTER_HEIGHT = 10;
+    const input = document.getElementById("imageInput");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d", true, false, "srgb", true);
+	const controlDiv = document.getElementById("control");
+	let filter = [];
+	let imageData = null;
+	let originalDataPixels = null;
+	
+	let roundSizeInput = document.createElement("input");
+	roundSizeInput.value = roundSize;
+	roundSizeInput.addEventListener('input', function() {
+		let val = parseFloat(roundSizeInput.value);
+		if (isNaN(val)) return;
+		roundSize = val;
+		if (imageData != null) drawProcessedImage();
+	});
+	controlDiv.appendChild(roundSizeInput);
+	controlDiv.appendChild(document.createElement("br"));
+	
+	for (let i = 0; i < FILTER_WIDTH; i++) {
+		let row = [];
+		filter.push(row);
+		for (let j = 0; j < FILTER_HEIGHT; j++) {
+			row.push([0, 0, 0]);
+			let input = document.createElement("input");
+			input.style.width = "40px";
+			input.value = 0;
+			input.addEventListener('input', function() {
+				let val = parseFloat(input.value);
+				if (isNaN(val)) return;
+				row[j][0] = val;
+				row[j][1] = val;
+				row[j][2] = val;
+				if (imageData != null) drawProcessedImage();
+			});
+			controlDiv.appendChild(input);
+		}
+		controlDiv.appendChild(document.createElement("br"));
+	}
+
+	function applyConvolution(imageData, filter) {
+		const data = imageData.data;
+		const oldData = new Uint8ClampedArray(data);
+		const width = imageData.width;
+		const height = imageData.height;
+		const filterHeight = filter.length;
+		const filterWidth = filter[0].length;
+		const halfFilterHeight = Math.floor(filterHeight / 2);
+		const halfFilterWidth = Math.floor(filterWidth / 2);
+
+		for (let y = 0; y < height; y++) {
+			for (let x = 0; x < width; x++) {
+				let r = 0, g = 0, b = 0;
+				const idx = (y * width + x) * 4;
+				for (let fy = 0; fy < filterHeight; fy++) {
+					for (let fx = 0; fx < filterWidth; fx++) {
+						const imageX = x + fx - halfFilterWidth;
+						const imageY = y + fy - halfFilterHeight;
+						if (imageX >= 0 && imageX < width && imageY >= 0 && imageY < height) {
+							const idx2 = (imageY * width + imageX) * 4;
+							const weights = filter[fy][fx];
+							r += (oldData[idx2]) * weights[0];
+							g += (oldData[idx2 + 1]) * weights[1];
+							b += (oldData[idx2 + 2]) * weights[2];
+						}
+					}
+				}
+				data[idx]     = r;
+				data[idx + 1] = g;
+				data[idx + 2] = b;
+				data[idx + 3] = 255;
+			}
+		}
+	}
+	
+	function applyMultiplication(tensor, factor) {
+		for (let i = 0; i < tensor.length; i++) {
+			let item = tensor[i];
+			if (item.constructor == Array) {
+				applyMultiplication(item, factor);
+			} else {
+				tensor[i] = item * factor;
+			}
+		}
+	}
+	
+	function drawProcessedImage() {
+		const data = imageData.data;
+		for (let i = 0; i < data.length; i += 4) {
+			data[i]     = Math.floor(originalDataPixels[i] / roundSize) * roundSize;
+			data[i + 1] = Math.floor(originalDataPixels[i + 1] / roundSize) * roundSize;
+			data[i + 2] = Math.floor(originalDataPixels[i + 2] / roundSize) * roundSize;
+		}
+		//applyMultiplication(filter, 1);
+		applyConvolution(imageData, filter);
+		ctx.putImageData(imageData, 0, 0);
+	}
+	
+    input.addEventListener("change", function(event) {
+		const file = event.target.files[0];
+		if (!file) return;
+
+		const img = new Image();
+		img.src = URL.createObjectURL(file);
+
+		img.onload = function() {
+			canvas.width = img.width;
+			canvas.height = img.height;
+			ctx.drawImage(img, 0, 0);
+
+			imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+			originalDataPixels = new Uint8ClampedArray(imageData.data);
+			drawProcessedImage();
+		};
+    });
+  </script>
+
+</body>
+</html>
